@@ -32,8 +32,10 @@ const FIELD = GRID * TILE;       // 游戏区域 = 520
 const PANEL = 220;               // 右侧信息栏宽度
 const W = FIELD + PANEL;         // 画布总宽 740
 const H = FIELD;                 // 画布总高 520
-const TANK = 40;                 // 坦克尺寸（与格子相同，保证转向对齐）
+const TANK = 40;                 // 坦克所在格子尺寸（用于转向对齐）
 const BS = 8;                    // 子弹尺寸
+const INSET = 3;                 // 碰撞盒内缩像素：贴墙/擦边不算碰撞
+const TANK_VIS = TANK - 2 * INSET; // 坦克实际碰撞/视觉尺寸 = 34
 
 const ENEMIES_TOTAL = 20;        // 每关敌人数
 const MAX_ENEMIES = 4;           // 场上最大敌人数量
@@ -180,25 +182,31 @@ function createBullet(tank){
   const cx = tank.x + TANK / 2, cy = tank.y + TANK / 2;
   let x = cx - BS / 2, y = cy - BS / 2;
   const dir = tank.dir === 'none' ? 'up' : tank.dir;
-  if(dir === 'up')    y = tank.y - BS;
-  if(dir === 'down')  y = tank.y + TANK;
-  if(dir === 'left')  x = tank.x - BS;
-  if(dir === 'right') x = tank.x + TANK;
+  if(dir === 'up')    y = tank.y + INSET - BS;
+  if(dir === 'down')  y = tank.y + INSET + TANK_VIS;
+  if(dir === 'left')  x = tank.x + INSET - BS;
+  if(dir === 'right') x = tank.x + INSET + TANK_VIS;
   return { x, y, dir, ownerType: tank.type,
            power: tank.type === 'player' ? tank.power : 1,
            speed: tank.type === 'player' ? 6 : 4, dead: false };
 }
 
 // ===================== 碰撞 =====================
+function boxHitsSolid(x, y, w, h){
+  const tx0 = Math.floor(x / TILE), ty0 = Math.floor(y / TILE);
+  const tx1 = Math.floor((x + w - 1) / TILE), ty1 = Math.floor((y + h - 1) / TILE);
+  for(let ty = ty0; ty <= ty1; ty++)
+    for(let tx = tx0; tx <= tx1; tx++)
+      if(isSolid(tileAt(tx, ty))) return true;
+  return false;
+}
 function canMove(tank, nx, ny){
   if(nx < 0 || ny < 0 || nx + TANK > FIELD || ny + TANK > FIELD) return false;
-  const corners = [[nx, ny], [nx + TANK - 1, ny], [nx, ny + TANK - 1], [nx + TANK - 1, ny + TANK - 1]];
-  for(const [cx, cy] of corners){
-    if(isSolid(tileAt(Math.floor(cx / TILE), Math.floor(cy / TILE)))) return false;
-  }
+  // 碰撞盒比坦克略小（内缩 INSET）：贴墙/擦边不算碰撞，可穿过一格宽通道
+  if(boxHitsSolid(nx + INSET, ny + INSET, TANK_VIS, TANK_VIS)) return false;
   for(const t of [player, ...enemies]){
     if(!t || t.dead || t === tank) continue;
-    if(overlap(nx, ny, TANK, TANK, t.x, t.y, TANK, TANK)) return false;
+    if(overlap(nx + INSET, ny + INSET, TANK_VIS, TANK_VIS, t.x + INSET, t.y + INSET, TANK_VIS, TANK_VIS)) return false;
   }
   return true;
 }
@@ -214,6 +222,14 @@ function moveTank(tank){
   if(tank.dir === 'none') return;
   const step = tryStep(tank, tank.dir);
   if(step){ tank.x = step.nx; tank.y = step.ny; }
+  else snapToGrid(tank);
+}
+// 被挡住时对齐到最近的格线，保证坦克随时能转向（避免停在非对齐位置卡死）
+function snapToGrid(t){
+  const nx = Math.round(t.x / TILE) * TILE;
+  const ny = Math.round(t.y / TILE) * TILE;
+  if(nx === t.x && ny === t.y) return;
+  if(canMove(t, nx, ny)){ t.x = nx; t.y = ny; }
 }
 
 // ===================== 子弹处理 =====================
@@ -253,7 +269,7 @@ function hitTank(b){
   for(const t of [player, ...enemies]){
     if(!t || t.dead) continue;
     if(t.type === b.ownerType) continue;
-    if(overlap(b.x, b.y, BS, BS, t.x, t.y, TANK, TANK)){
+    if(overlap(b.x, b.y, BS, BS, t.x + INSET, t.y + INSET, TANK_VIS, TANK_VIS)){
       if(t.type === 'player'){
         if(player.shieldUntil > now()) sfx('shield');
         else playerDie();
@@ -555,12 +571,12 @@ function drawTankShape(x, y, dir, body, track, size){
 function drawTank(t, isPlayer){
   const body = isPlayer ? '#f5c518' : '#c7ccd1';
   const track = isPlayer ? '#a8740a' : '#7d848c';
-  drawTankShape(t.x, t.y, t.dir, body, track, TANK);
+  drawTankShape(t.x + INSET, t.y + INSET, t.dir, body, track, TANK_VIS);
   if(isPlayer && t.shieldUntil > now()){
     ctx.save();
     ctx.strokeStyle = 'rgba(80,200,255,' + (0.5 + 0.4 * Math.sin(now() / 60)) + ')';
     ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(t.x + TANK / 2, t.y + TANK / 2, TANK / 2 + 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(t.x + TANK / 2, t.y + TANK / 2, TANK_VIS / 2 + 6, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 }
