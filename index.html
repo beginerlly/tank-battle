@@ -155,7 +155,7 @@ function overlap(ax, ay, aw, ah, bx, by, bw, bh){
 // ===================== 实体创建 =====================
 function createTank(x, y, dir, type){
   return { x, y, dir, type, speed: 2, power: 0, maxBullets: 1,
-           shieldUntil: 0, cooldown: 0, pending: null, dead: false };
+           shieldUntil: 0, cooldown: 0, pending: null, moving: false, dead: false };
 }
 function spawnPlayer(){
   player = createTank(PLAYER_SPAWN.tx * TILE, PLAYER_SPAWN.ty * TILE, 'up', 'player');
@@ -178,13 +178,13 @@ function spawnEnemy(){
 }
 function createBullet(tank){
   const cx = tank.x + TANK / 2, cy = tank.y + TANK / 2;
-  const off = TANK / 2 + BS / 2;
   let x = cx - BS / 2, y = cy - BS / 2;
-  if(tank.dir === 'up')    y = tank.y - off;
-  if(tank.dir === 'down')  y = tank.y + TANK + off - BS;
-  if(tank.dir === 'left')  x = tank.x - off;
-  if(tank.dir === 'right') x = tank.x + TANK + off - BS;
-  return { x, y, dir: tank.dir, ownerType: tank.type,
+  const dir = tank.dir === 'none' ? 'up' : tank.dir;
+  if(dir === 'up')    y = tank.y - BS;
+  if(dir === 'down')  y = tank.y + TANK;
+  if(dir === 'left')  x = tank.x - BS;
+  if(dir === 'right') x = tank.x + TANK;
+  return { x, y, dir, ownerType: tank.type,
            power: tank.type === 'player' ? tank.power : 1,
            speed: tank.type === 'player' ? 6 : 4, dead: false };
 }
@@ -192,7 +192,7 @@ function createBullet(tank){
 // ===================== 碰撞 =====================
 function canMove(tank, nx, ny){
   if(nx < 0 || ny < 0 || nx + TANK > FIELD || ny + TANK > FIELD) return false;
-  const corners = [[nx, ny], [nx + TANK, ny], [nx, ny + TANK], [nx + TANK, ny + TANK]];
+  const corners = [[nx, ny], [nx + TANK - 1, ny], [nx, ny + TANK - 1], [nx + TANK - 1, ny + TANK - 1]];
   for(const [cx, cy] of corners){
     if(isSolid(tileAt(Math.floor(cx / TILE), Math.floor(cy / TILE)))) return false;
   }
@@ -224,7 +224,7 @@ function destroyBase(){
   gameOver();
 }
 function hitTile(b){
-  const pts = [[b.x, b.y], [b.x + BS, b.y], [b.x, b.y + BS], [b.x + BS, b.y + BS]];
+  const pts = [[b.x, b.y], [b.x + BS - 1, b.y], [b.x, b.y + BS - 1], [b.x + BS - 1, b.y + BS - 1]];
   for(const [cx, cy] of pts){
     const tx = Math.floor(cx / TILE), ty = Math.floor(cy / TILE);
     const c = tileAt(tx, ty);
@@ -338,14 +338,20 @@ function getDir(){
 }
 function fireHeld(){ return keys.has(' ') || keys.has('j'); }
 function steer(p, want){
-  if(want && want !== p.dir){
-    if(isAligned(p)) p.dir = want;
-    else p.pending = want;
-  } else if(want && want === p.dir){
-    p.pending = null;
+  if(want){
+    if(want === p.dir){
+      p.pending = null;
+    } else if(isAligned(p)){
+      p.dir = want;
+      p.pending = null;
+    } else {
+      p.pending = want;
+    }
+    p.moving = true;
   } else {
-    if(isAligned(p)) p.dir = 'none';
+    // 松开方向键：保持朝向，滑到下一个交叉点再停下
     p.pending = null;
+    if(isAligned(p)) p.moving = false;
   }
 }
 function playerShoot(){
@@ -423,7 +429,7 @@ function update(){
     if(player.pending && isAligned(player)){ player.dir = player.pending; player.pending = null; }
     if(player.cooldown > 0) player.cooldown--;
     if(fireHeld()) playerShoot();
-    moveTank(player);
+    if(player.moving) moveTank(player);
   }
 
   // 敌人
