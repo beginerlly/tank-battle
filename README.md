@@ -45,11 +45,7 @@
 
 ## 🌐 在线试玩
 
-> 可启用 GitHub Pages 后通过以下链接在线游玩（部署后更新）：
-
-```
-https://<你的用户名>.github.io/tank-battle/
-```
+在线试玩：<https://beginerlly.github.io/tank-battle/>
 
 ## 📁 目录结构
 
