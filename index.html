@@ -37,8 +37,10 @@ const BS = 8;                    // 子弹尺寸
 const INSET = 3;                 // 碰撞盒内缩像素：贴墙/擦边不算碰撞
 const TANK_VIS = TANK - 2 * INSET; // 坦克实际碰撞/视觉尺寸 = 34
 
-const ENEMIES_TOTAL = 20;        // 每关敌人数
-const MAX_ENEMIES = 4;           // 场上最大敌人数量
+// 难度随关卡递增：早期关卡敌人少、同屏少、刷得慢、速度慢
+function enemiesForLevel(lv){ return Math.min(20, 6 + lv * 2); }      // L1:8 … L7+:20
+function maxEnemiesForLevel(lv){ return lv >= 4 ? 4 : (lv === 3 ? 3 : 2); } // L1/2:2, L3:3, L4+:4
+function spawnDelayForLevel(lv){ return lv >= 4 ? 60 : 100 - lv * 10; }     // L1:90帧 … L4+:60帧
 const KILL_SET = [4, 11, 18];    // 击杀到这些数量时必掉道具
 const POWER_TYPES = ['star','shield','bomb','life'];
 
@@ -169,7 +171,7 @@ function spawnEnemy(){
     const x = tx * TILE, y = ty * TILE;
     const e = createTank(x, y, 'down', 'enemy');
     if(canMove(e, x, y)){
-      e.speed = (level >= 2 && Math.random() < 0.4) ? 2 : 1;
+      e.speed = (level >= 3 && Math.random() < 0.3) ? 2 : 1;   // 高速敌人从第 3 关起才出现
       e.cooldown = 30 + Math.random() * 60;
       enemies.push(e);
       enemiesLeft--;
@@ -414,7 +416,7 @@ function startLevel(newGame){
   if(newGame){ score = 0; lives = 3; level = 1; }
   resetStage();
   enemies = []; bullets = []; powerups = []; explosions = [];
-  enemiesLeft = ENEMIES_TOTAL; killedTotal = 0; spawnTimer = 0;
+  enemiesLeft = enemiesForLevel(level); killedTotal = 0; spawnTimer = 0;
   spawnPlayer();
   state = 'playing';
 }
@@ -431,8 +433,8 @@ function togglePause(){
 // ===================== 更新循环 =====================
 function spawnLogic(){
   const active = enemies.length;
-  if(enemiesLeft > 0 && active < MAX_ENEMIES){
-    if(spawnTimer <= 0){ spawnEnemy(); spawnTimer = 60; }
+  if(enemiesLeft > 0 && active < maxEnemiesForLevel(level)){
+    if(spawnTimer <= 0){ spawnEnemy(); spawnTimer = spawnDelayForLevel(level); }
     else spawnTimer--;
   }
 }
